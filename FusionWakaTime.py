@@ -14,6 +14,7 @@ from . import commands
 from .lib import fusionAddInUtils as futil
 import threading
 import requests
+import platform
 
 app = adsk.core.Application.get()
 ui = app.userInterface
@@ -36,10 +37,23 @@ if os.path.exists(parsePath):
 else:
     ErrorMessage = ctypes.windll.user32.MessageBoxW(0, u"Please use the script to download the hackatime files! https://hackatime.hackclub.com/", u"Invalid File", 0)
 
-WakaTimePath = os.path.join(os.path.dirname(__file__), "WakaTimeCli.exe")
+arch = platform.machine()
+app.log(platform.machine())
+
+
+if arch == "AMD64":
+    WakaTimePath = os.path.join(os.path.dirname(__file__), "WakaTimeCli.exe")
+elif arch in ("ARM64", "aarch64"):
+    WakaTimePath = os.path.join(os.path.dirname(__file__), "WakaTimeCliARM64.exe")
+elif arch in ("i386", "x86"):
+    WakaTimePath = os.path.join(os.path.dirname(__file__), "WakaTimeCli386.exe")
+else:
+    print("Unsupported CPU platform ")
+
 
 timeout = 30
 start_time = time.time()
+
 
 def getActiveDocument():
     try:
@@ -55,11 +69,6 @@ design = getActiveDocument()
 if not design:
     design = "Untitled"
 
-
-
-
-
-design = app.activeDocument.name
 app.log("FusionDocument type: " + str(design))
 
 
