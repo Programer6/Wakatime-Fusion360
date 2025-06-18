@@ -38,6 +38,15 @@ else:
 
 WakaTimePath = os.path.join(os.path.dirname(__file__), "WakaTimeCli.exe")
 
+timeout = 30
+start_time = time.time()
+
+while app.activeDocument is None:
+    if time.time() - start_time > timeout:
+        ctypes.windll.user32.MessageBoxW(0, u"Error No project open in alloted time", u"Invalid", 0)
+        sys.exit()
+        time.sleep(1)
+
 
 
 
