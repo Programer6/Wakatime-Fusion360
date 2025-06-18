@@ -57,7 +57,7 @@ start_time = time.time()
 
 def getActiveDocument():
     try:
-        design= app.activeDocument
+        design= adsk.core.DataFolder.parentFolder
         if design is not None:
             return design.name
     except Exception as e:
