@@ -57,14 +57,15 @@ start_time = time.time()
 
 def getActiveDocument():
     try:
-        design= adsk.core.DataFolder.parentFolder
-        if design is not None:
-            return design.name
+        design= app.activeDocument
+        if design:
+            folder = design.dataFile.parentFolder
+            return folder
     except Exception as e:
         app.log(f"Could not get Active Document: {e}")
-        return None
+    return None
 
-
+folder = getActiveDocument()
 design = getActiveDocument()
 if not design:
     design = "Untitled"
@@ -86,7 +87,7 @@ def sendHeartBeat():
             CliCommand = [
             WakaTimePath,
             '--key', APIKEY,
-            '--entity', design,
+            '--entity', folder,
             '--time', str(timestamp),
             '--write',
             '--plugin', 'fusion360-wakatime/0.0.1',
