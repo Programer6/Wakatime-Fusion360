@@ -7,3 +7,5 @@ __pycache__/
 
 # Environment variables file
 .env
+FusionWakaTime.py
+guideimage2.png
