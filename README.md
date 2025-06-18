@@ -17,5 +17,7 @@
 
 3. *Optional* Check Run on startup
 
- ![Guide Image 2](./guideimage2.png)
-![Guide Part 1](./guidepart1.png)
+
+   ![Guide Part 1](./guidepart1.png)
+   ![Guide Image 2](./guideimage2.png)
+
