@@ -1,4 +1,7 @@
 # Installation Guide
+### Credits
+credits to @its-kronos for hotfixing while i was asleep 
+
 
 ## Prerequisites
 
