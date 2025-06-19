@@ -1,12 +1,11 @@
 {
-	"autodeskProduct":	"Fusion",
+	"autodeskProduct":	"fusion360",
 	"type":	"addin",
-	"author":	"Andy",
-	"description":	{
-		"":	""
-	},
+	"main": "FusionWakaTime.py",
+	"author":	"Andy (Some help from its_kronos)",
+	"description":	"",
 	"version":	"1.0.0",
-	"runOnStartup":	false,
+	"runOnStartup":	true,
 	"supportedOS":	"windows|mac",
 	"editEnabled":	true,
 	"iconFilename":	"AddInIcon.svg"
