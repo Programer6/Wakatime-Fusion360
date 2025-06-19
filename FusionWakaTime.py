@@ -60,7 +60,8 @@ def getActiveDocument():
         design= app.activeDocument
         if design:
             folder = design.dataFile.parentFolder
-            return folder
+            if folder is none:
+                folder = design
     except Exception as e:
         app.log(f"Could not get Active Document: {e}")
     return None
