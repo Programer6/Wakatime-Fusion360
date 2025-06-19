@@ -70,6 +70,8 @@ design = getActiveDocument()
 if not design:
     design = "Untitled"
 
+projectname = app.activeDocument.name
+
 app.log("FusionDocument type: " + str(design))
 
 
@@ -87,11 +89,11 @@ def sendHeartBeat():
             CliCommand = [
             WakaTimePath,
             '--key', APIKEY,
-            '--entity', folder,
+            '--entity', folder.name,
             '--time', str(timestamp),
             '--write',
             '--plugin', 'fusion360-wakatime/0.0.1',
-            '--alternate-project', design,
+            '--alternate-project', projectname,
             '--category', "designing",
             '--language', 'Fusion360',
             '--is-unsaved-entity',
@@ -100,6 +102,7 @@ def sendHeartBeat():
                 app.log("Running CLI: " + ' '.join(CliCommand))
                 result = subprocess.run(CliCommand, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
                 app.log("Heartbeat Sent.")
+                app.log(folder.name)
 
             except Exception as e:
                 app.log("Error sending heartbeat: " + str(e))
