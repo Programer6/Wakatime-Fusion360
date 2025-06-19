@@ -51,12 +51,12 @@ stopEvent = threading.Event()
 
 def run(context):
     try:
-        runa()  # or move all its contents here directly
+        Contents()  # or move all its contents here directly
     except Exception as e:
         app.log(f"Run failed: {str(e)}")
 
 
-def runa():
+def Contents():
     app.log("part -1")
     try:
         app.log("part 1")
