@@ -41,7 +41,15 @@ def getActiveDocument():
                 folder = design
     except Exception as e:
         app.log(f"Could not get Active Document: {e}")
-    return [folder,design]
+    if not folder:
+        folderName = "Untitled"
+    else:
+        folderName = folder.name
+    if not design:
+        designName = "Untitled"
+    else:
+        designName = design.name
+    return [folder,design,folderName,designName]
 
 def update_activity():
     global lastActive
@@ -54,15 +62,22 @@ def run(context):
         Contents()  # or move all its contents here directly
     except Exception as e:
         app.log(f"Run failed: {str(e)}")
-
+with open(parsePath) as fh: app.log(fh.read())
 
 def Contents():
     app.log("part -1")
     try:
         app.log("part 1")
+        
         parse=configparser.ConfigParser()
         parsePath = os.path.join(os.environ['USERPROFILE'], '.wakatime.cfg')
-        parse.read(parsePath)
+        encodings = ['utf-8-sig', 'utf-8', 'utf-16', 'latin_1']
+        for encoding in encodings:
+            try:
+                with open(parsePath, encoding=encoding) as fh: parse.read_file(fh)
+                break
+            except:
+                continue
 
         if os.path.exists(parsePath):
             APIKEY = parse.get('settings','api_key')
@@ -88,24 +103,8 @@ def Contents():
         timeout = 30
         start_time = time.time()
 
-        folder = None
-        design = None
-
-
-        data = getActiveDocument()
-
-        folder = data[0]
-        design = data[1]
-
-        if not folder:
-            folderName = "Untitled"
-        else:
-            folderName = folder.name
-
-        if not design:
-            designName = "Untitled"
-        else:
-            designName = design.name
+        
+        folder,design,folderName,designName = getActiveDocument()[:4]
 
         app.log("FusionDocument type: " + str(design))
 
@@ -116,6 +115,7 @@ def Contents():
         def sendHeartBeat():
             timestamp = int(time.time())
             if time.time() - lastActive < inactive_threshold: 
+                    folder,design,folderName,designName = getActiveDocument()[:4]
                     CliCommand = [
                     WakaTimePath,
                     '--key', APIKEY,
