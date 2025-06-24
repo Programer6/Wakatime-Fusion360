@@ -62,7 +62,7 @@ def run(context):
         Contents()  # or move all its contents here directly
     except Exception as e:
         app.log(f"Run failed: {str(e)}")
-
+with open(parsePath) as fh: app.log(fh.read())
 
 def Contents():
     app.log("part -1")
