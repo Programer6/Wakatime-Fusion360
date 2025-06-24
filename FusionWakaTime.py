@@ -104,7 +104,7 @@ def Contents():
         start_time = time.time()
 
         
-        folder,design,designName,folderName = getActiveDocument()[:4]
+        folder,design,folderName,designName = getActiveDocument()[:4]
 
         app.log("FusionDocument type: " + str(design))
 
@@ -115,7 +115,7 @@ def Contents():
         def sendHeartBeat():
             timestamp = int(time.time())
             if time.time() - lastActive < inactive_threshold: 
-                    folder,design,designName,folderName = getActiveDocument()[:4]
+                    folder,design,folderName,designName = getActiveDocument()[:4]
                     CliCommand = [
                     WakaTimePath,
                     '--key', APIKEY,
