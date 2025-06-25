@@ -16,11 +16,29 @@ from .lib import fusionAddInUtils as futil
 import threading
 import requests
 import platform
+import chardet
+
 
 app = adsk.core.Application.get()
 
 
 ui = app.userInterface
+
+def checkInstall():
+    pypath = os.path.dirname(sys.executable)
+    exists = os.path.exists(pypath + "/Lib/site-packages/requests")
+    if exists == False:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "chardet"])
+        app.log("Dependencies Installed...!")
+    if exists == True:
+        app.log("Dependencies already installed...!")
+
+
+
+
+
+checkInstall()
+
 
 lastActive = time.time()
 heartbeat_interval = 30
@@ -56,13 +74,27 @@ def run(context):
         app.log(f"Run failed: {str(e)}")
 
 
+
 def Contents():
     app.log("part -1")
     try:
+        def DetectEncode():
+         configPath = os.path.join(os.environ['USERPROFILE'], '.wakatime.cfg')
+         with open(configPath, "rb") as file:
+                data = file.read()
+                encoded = chardet.detect(data)
+                encoding = encoded["encoding"]
+                if encoding is None:
+                    return "UTF-8"
+                else:
+                    return encoding
+        DetectEncode()
+
+        app.log(DetectEncode())
         app.log("part 1")
         parse=configparser.ConfigParser()
         parsePath = os.path.join(os.environ['USERPROFILE'], '.wakatime.cfg')
-        parse.read(parsePath)
+        parse.read(parsePath, encoding=DetectEncode())
 
         if os.path.exists(parsePath):
             APIKEY = parse.get('settings','api_key')
@@ -87,25 +119,10 @@ def Contents():
 
         timeout = 30
         start_time = time.time()
-
-        folder = None
         design = None
 
 
         data = getActiveDocument()
-
-        folder = data[0]
-        design = data[1]
-
-        if not folder:
-            folderName = "Untitled"
-        else:
-            folderName = folder.name
-
-        if not design:
-            designName = "Untitled"
-        else:
-            designName = design.name
 
         app.log("FusionDocument type: " + str(design))
 
@@ -113,7 +130,23 @@ def Contents():
 
         app.log(url)
 
+        
+        lastKnownProjectName = "Untitled"
+        lastKnownDesignName = "Untitled"
+
         def sendHeartBeat():
+            getActiveDocument()
+            global lastKnownProjectName
+            global lastKnownDesignName
+            folder, design = getActiveDocument()
+            if folder:
+                lastKnownProjectName = folder.name
+            folderName = lastKnownProjectName
+            
+            if design:
+                lastKnownDesignName = design.name
+            designName = lastKnownDesignName
+                
             timestamp = int(time.time())
             if time.time() - lastActive < inactive_threshold: 
                     CliCommand = [
