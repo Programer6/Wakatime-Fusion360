@@ -14,6 +14,16 @@ from subprocess import CREATE_NO_WINDOW
 from . import commands
 from .lib import fusionAddInUtils as futil
 import threading
+def checkInstall():
+    pypath = os.path.dirname(sys.executable)
+    exists = os.path.exists(pypath + "/Lib/site-packages/requests")
+    if exists == False:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "chardet"])
+        app.log("Dependencies Installed...!")
+    if exists == True:
+        app.log("Dependencies already installed...!")
+
+checkInstall()
 import requests
 import platform
 import chardet
@@ -24,20 +34,13 @@ app = adsk.core.Application.get()
 
 ui = app.userInterface
 
-def checkInstall():
-    pypath = os.path.dirname(sys.executable)
-    exists = os.path.exists(pypath + "/Lib/site-packages/requests")
-    if exists == False:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "chardet"])
-        app.log("Dependencies Installed...!")
-    if exists == True:
-        app.log("Dependencies already installed...!")
 
 
 
 
 
-checkInstall()
+
+
 
 
 lastActive = time.time()

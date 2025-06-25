@@ -9,3 +9,5 @@ __pycache__/
 .env
 FusionWakaTime.py
 guideimage2.png
+install.py
+
