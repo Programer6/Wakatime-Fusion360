@@ -10,6 +10,15 @@ credits to @its-kronos for hotfixing while i was asleep
 - Windows 10/11
 
 ## Download
+Option 1
+1. Use the install script
+
+2. Open it in CMD 
+
+3. Run ``` python install.py```
+
+
+Option 2
 
 1. Clone the repository:
    ```bash
