@@ -16,9 +16,10 @@ from .lib import fusionAddInUtils as futil
 import threading
 def checkInstall():
     pypath = os.path.dirname(sys.executable)
+    PyExe = os.path.join(pypath,"python","python.exe")
     exists = os.path.exists(pypath + "/Lib/site-packages/requests")
     if exists == False:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "chardet"])
+        subprocess.check_call([PyExe, "-m", "pip", "install", "requests", "chardet"])
         app.log("Dependencies Installed...!")
     if exists == True:
         app.log("Dependencies already installed...!")
