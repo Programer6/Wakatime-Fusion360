@@ -1,5 +1,8 @@
 import adsk.core
 import adsk.fusion
+app = adsk.core.Application.get()
+ui = app.userInterface
+
 
 import traceback
 import hashlib
@@ -28,21 +31,6 @@ checkInstall()
 import requests
 import platform
 import chardet
-
-
-app = adsk.core.Application.get()
-
-
-ui = app.userInterface
-
-
-
-
-
-
-
-
-
 
 lastActive = time.time()
 heartbeat_interval = 30
