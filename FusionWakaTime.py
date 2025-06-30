@@ -49,6 +49,7 @@ def getActiveDocument():
                     folder = design
             else:
                 folder = design
+
     except Exception as e:
         app.log(f"Could not get Active Document: {e}")
     return [folder,design]
@@ -138,7 +139,14 @@ def Contents():
             if design:
                 lastKnownDesignName = design.name
             designName = lastKnownDesignName
+
+            
+            if design and design.dataFile:
+                versionNumber = f" v{design.dataFile.versionNumber}"
+                designName = design.name.replace(versionNumber, '')
                 
+
+
             timestamp = int(time.time())
             if time.time() - lastActive < inactive_threshold: 
                     CliCommand = [
