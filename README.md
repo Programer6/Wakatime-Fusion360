@@ -46,9 +46,11 @@ Follow these steps to install the add-in. This process works for both Windows an
 -   Go to the **UTILITIES** tab and click the **Scripts and Add-Ins** icon.
 -   In the new window, select the **Add-Ins** tab.
 -   Click the green **+** icon next to "My Add-Ins".
--   ![guideimage2](https://github.com/LiveWaffle/Hackatime-Fusion360/assets/175021115/285c57b7-5a04-4054-9549-14a01c40f283)
-
 -   In the file dialog, navigate to and select the `FusionWakaTime` folder you renamed in Step 2.
+![My-add-in](https://github.com/user-attachments/assets/8eede38a-9a08-4618-9fb3-20b0fc1543e9)
+![FusionWakaTime](https://github.com/user-attachments/assets/29a37634-eb1c-4bf2-b728-bc83e3078db6)
+
+
 
 #### 4. Run the Add-in
 -   The `FusionWakaTime` add-in will now appear in your list.
