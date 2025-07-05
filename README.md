@@ -25,8 +25,12 @@ Follow these steps to install the add-in. This process works for both Windows an
 -   Go to the [main page of this repository](https://github.com/LiveWaffle/Hackatime-Fusion360).
 -   Click the green `<> Code` button, then click **Download ZIP**.
 -   Unzip the downloaded file. You will get a folder named something like `Hackatime-Fusion360-main`.
-<img width="397" alt="Screenshot 2025-07-05 at 11 34 58 AM" src="https://github.com/user-attachments/assets/d77d50e4-7da3-4f80-9139-c754ee72b6e0" />
 <img width="309" alt="Screenshot 2025-07-05 at 11 36 13 AM" src="https://github.com/user-attachments/assets/881233cb-ea98-448f-8b6e-5f43c6b5b87d" />
+
+<br>
+
+<img width="397" alt="Screenshot 2025-07-05 at 11 34 58 AM" src="https://github.com/user-attachments/assets/d77d50e4-7da3-4f80-9139-c754ee72b6e0" />
+
 
 #### 2. Rename the Folder
 -   Rename the unzipped folder from `Hackatime-Fusion360-main` to exactly:
