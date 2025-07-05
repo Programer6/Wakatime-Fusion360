@@ -61,27 +61,50 @@ The first time you run it, the add-in will automatically download the necessary 
 
 ---
 
-## First-Time Configuration (API Key)
+### First-Time Configuration (API Key)
 
 For the add-in to log your time, you need to tell it your secret WakaTime API key.
 
-1.  Find your **Secret API Key** on your [WakaTime Settings page](https://wakatime.com/settings/api-key) or  or if you're a [Hackclubber](https://hackclub.com) with [Hakatime Setting Page](https://hackatime.hackclub.com/my/settings).
+1.  Find your **Secret API Key** on your settings page:
+    *   **WakaTime:** [wakatime.com/settings/api-key](https://wakatime.com/settings/api-key)
+    *   **HackaTime:** [hackatime.hackclub.com/my/settings](https://hackatime.hackclub.com/my/settings)
 
 2.  Create a configuration file in your user home directory. The file must be named `.wakatime.cfg`.
-    -   **Windows:** `C:\Users\YOUR_USERNAME\.wakatime.cfg`
-    -   **macOS:** `/Users/YOUR_USERNAME/.wakatime.cfg`
-  
+    *   **Windows:** `C:\Users\YOUR_USERNAME\.wakatime.cfg`
+    *   **macOS:** `/Users/YOUR_USERNAME/.wakatime.cfg`
 
-3.  Open the file in a text editor and add the following lines, pasting your key where indicated:
+3.  Open the file in a text editor and add the correct configuration based on which service you use.
 
-[settings]
-api_url = https://hackatime.hackclub.com/api/hackatime/v1 or 
-api_key = YOUR_API_Key
-heartbeat_rate_limit_seconds = 30
-+ any other wakatime configs you want to add: https://github.com/wakatime/wakatime-cli/blob/develop/USAGE.md#ini-config-file
+    <br>
 
+    **For Hack Club / HackaTime Users:**
+    Your file must include both the `api_key` and the custom `api_url`.
+
+    ```ini
+    [settings]
+    api_key = YOUR_HACKATIME_API_KEY_HERE
+    api_url = https://hackatime.hackclub.com/api/hackatime/v1
+    ```
+
+    **For Standard WakaTime.com Users:**
+    Your file only needs the `api_key`. The `api_url` will default to WakaTime.com.
+
+    ```ini
+    [settings]
+    api_key = YOUR_WAKATIME_API_KEY_HERE
+    ```
+
+    *Note: You can add other advanced configurations to this file if needed. See the [official documentation](https://github.com/wakatime/wakatime-cli/blob/develop/USAGE.md#ini-config-file) for all available options.*
 
 4.  Save the file. Restart Fusion 360, and your time will start logging automatically!
+
+---
+
+## Troubleshooting
+
+-   **My time isn't appearing on my dashboard:**
+    1.  Double-check that your API key and `api_url` (if needed) are correct in your `.wakatime.cfg` file.
+    2.  In Fusion 360, go to **UTILITIES -> Text Commands** (or use `Ctrl+Alt+C`). This opens a console that will show any error messages from the add-in.
 
 ## Credits
 
