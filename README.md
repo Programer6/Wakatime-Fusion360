@@ -84,6 +84,7 @@ For the add-in to log your time, you need to tell it your secret WakaTime API ke
     [settings]
     api_key = YOUR_HACKATIME_API_KEY_HERE
     api_url = https://hackatime.hackclub.com/api/hackatime/v1
+    heartbeat_rate_limit_seconds = 30
     ```
 
     **For Standard WakaTime.com Users:**
