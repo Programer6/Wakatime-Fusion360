@@ -1,200 +1,193 @@
 import adsk.core
 import adsk.fusion
-app = adsk.core.Application.get()
-ui = app.userInterface
-
-
 import traceback
-import hashlib
 import os
 import sys
 import time
 import subprocess
-import ctypes
-import configparser
-from subprocess import Popen, PIPE, STDOUT
-from subprocess import CREATE_NO_WINDOW
-from . import commands
-from .lib import fusionAddInUtils as futil
-import threading
-def checkInstall():
-    pypath = os.path.dirname(sys.executable)
-    PyExe = os.path.join(pypath,"python","python.exe")
-    exists = os.path.exists(pypath + "/Lib/site-packages/requests")
-    if exists == False:
-        subprocess.check_call([PyExe, "-m", "pip", "install", "requests", "chardet"])
-        app.log("Dependencies Installed...!")
-    if exists == True:
-        app.log("Dependencies already installed...!")
-
-checkInstall()
-import requests
 import platform
-import chardet
+import urllib.request
+import zipfile
+import stat
+import threading
+import json
+from pathlib import Path
 
-lastActive = time.time()
-heartbeat_interval = 30
-inactive_threshold = 30
+# --- Globals and Setup ---
+app = adsk.core.Application.get()
+ui = app.userInterface
 
-def getActiveDocument():
+# Configuration
+ADDIN_NAME = 'FusionWakaTime'
+ADDIN_VERSION = '2.0.0' 
+HEARTBEAT_INTERVAL = 120  
+
+stop_event = threading.Event()
+last_heartbeat_time = 0
+
+
+RESOURCES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'wakatime-cli-data')
+CLI_PATH = None
+
+def get_os_and_arch():
+    """Determines the OS and architecture for the WakaTime CLI."""
+    os_name = 'unknown'
+    arch_name = 'unknown'
+
+    if sys.platform == 'win32':
+        os_name = 'windows'
+    elif sys.platform == 'darwin': 
+        os_name = 'darwin'
+    else: 
+        return None, None
+
+    machine = platform.machine().lower()
+    if 'amd64' in machine or 'x86_64' in machine:
+        arch_name = 'amd64'
+    elif 'arm64' in machine or 'aarch64' in machine:
+        arch_name = 'arm64'
+    elif 'i386' in machine or 'x86' in machine:
+        arch_name = '386'
+    else:
+        return None, None
+        
+    return os_name, arch_name
+
+def get_cli_path():
+    """Gets the path to the wakatime-cli executable, downloading it if necessary."""
+    global CLI_PATH
+    if CLI_PATH and os.path.exists(CLI_PATH):
+        return CLI_PATH
+
+    os_name, arch_name = get_os_and_arch()
+    if not os_name or not arch_name:
+        app.log(f'{ADDIN_NAME}: Unsupported OS or architecture.')
+        return None
+    
+    cli_filename = f'wakatime-cli-{os_name}-{arch_name}'
+    if os_name == 'windows':
+        cli_filename += '.exe'
+
+    final_cli_path = os.path.join(RESOURCES_DIR, cli_filename)
+
+    if os.path.exists(final_cli_path):
+        CLI_PATH = final_cli_path
+        return CLI_PATH
+
+    app.log(f'{ADDIN_NAME}: wakatime-cli not found. Downloading...')
+    if not os.path.exists(RESOURCES_DIR):
+        os.makedirs(RESOURCES_DIR)
+
     try:
-        folder = None
-        design = None
+        latest_release_url = "https://api.github.com/repos/wakatime/wakatime-cli/releases/latest"
+        with urllib.request.urlopen(latest_release_url) as response:
+            data = json.loads(response.read().decode())
+            latest_version = data['tag_name']
+            app.log(f'{ADDIN_NAME}: Latest CLI version is {latest_version}.')
+    except Exception as e:
+        app.log(f"{ADDIN_NAME}: Could not fetch latest version tag, using fallback. Error: {e}")
+        latest_version = "v1.89.1" 
 
-        design= app.activeDocument
-        if design:
-            if design.dataFile:
-                folder = design.dataFile.parentFolder
-                if folder is None:
-                    folder = design
-            else:
-                folder = design
+    download_url = f'https://github.com/wakatime/wakatime-cli/releases/download/{latest_version}/wakatime-cli-{os_name}-{arch_name}.zip'
+    zip_path = os.path.join(RESOURCES_DIR, 'wakatime-cli.zip')
+
+    try:
+        app.log(f'{ADDIN_NAME}: Downloading from {download_url}')
+        urllib.request.urlretrieve(download_url, zip_path)
+        
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(RESOURCES_DIR)
+        
+        os.remove(zip_path)
+
+        if os_name != 'windows' and os.path.exists(final_cli_path):
+            os.chmod(final_cli_path, os.stat(final_cli_path).st_mode | stat.S_IEXEC)
+
+        app.log(f'{ADDIN_NAME}: CLI downloaded and unpacked successfully.')
+        CLI_PATH = final_cli_path
+        return CLI_PATH
 
     except Exception as e:
-        app.log(f"Could not get Active Document: {e}")
-    return [folder,design]
+        ui.messageBox(f'Error downloading WakaTime CLI: {e}')
+        app.log(f'{ADDIN_NAME}: Error downloading or extracting wakatime-cli: {e}')
+        return None
 
-def update_activity():
-    global lastActive
-    lastActive = time.time()
+def get_wakatime_config_path():
+    """Returns the cross-platform path to the .wakatime.cfg file."""
+    return os.path.join(str(Path.home()), '.wakatime.cfg')
 
-stopEvent = threading.Event()
+def send_heartbeat(is_write=False):
+    """Constructs the command and sends a heartbeat to the WakaTime API."""
+    cli = get_cli_path()
+    if not cli:
+        app.log(f'{ADDIN_NAME}: Cannot send heartbeat, wakatime-cli path is not configured.')
+        return
+
+    doc = app.activeDocument
+    if not doc: return
+
+    entity = doc.name
+    project = "Unsaved Project"
+    if doc.dataFile:
+        entity = doc.dataFile.name
+        if doc.dataFile.parentFolder:
+            project = doc.dataFile.parentFolder.name
+    
+    command = [ cli, '--entity', entity, '--plugin', f'fusion-360-wakatime/{ADDIN_VERSION}', '--project', project ]
+    if is_write:
+        command.append('--write')
+    
+    creationflags = 0
+    if sys.platform == 'win32':
+        creationflags = subprocess.CREATE_NO_WINDOW
+
+    app.log(f'{ADDIN_NAME}: Sending heartbeat: {" ".join(command)}')
+    try:
+        subprocess.Popen(command, creationflags=creationflags)
+        global last_heartbeat_time
+        last_heartbeat_time = time.time()
+    except Exception as e:
+        app.log(f'{ADDIN_NAME}: Error sending heartbeat: {e}')
+
+
+class ActivityHandler(adsk.core.DocumentEventHandler):
+    def __init__(self):
+        super().__init__()
+    def notify(self, args: adsk.core.DocumentEventArgs):
+        try:
+            # Any tracked event means the user is active. Send a heartbeat if enough time has passed.
+            if time.time() - last_heartbeat_time > HEARTBEAT_INTERVAL:
+                is_write = isinstance(args, adsk.core.DocumentSavingEventArgs)
+                send_heartbeat(is_write=is_write)
+        except:
+            app.log(traceback.format_exc())
+
+handlers = []
 
 def run(context):
     try:
-        Contents()  # or move all its contents here directly
-    except Exception as e:
-        app.log(f"Run failed: {str(e)}")
+        if not os.path.exists(get_wakatime_config_path()):
+            ui.messageBox(f"WakaTime API Key not found.\nPlease create the file:\n{get_wakatime_config_path()}\n\nand add your API key before restarting Fusion 360.", f"{ADDIN_NAME} Setup")
+            return
+        
+        get_cli_path() 
 
+        on_activity = ActivityHandler()
+        doc_events = [app.documentActivated, app.documentSaved]
+        
+        for event in doc_events:
+            event.add(on_activity)
+            handlers.append((event, on_activity))
 
+        app.log(f'{ADDIN_NAME} v{ADDIN_VERSION} started successfully.')
+    except:
+        app.log(traceback.format_exc())
 
-def Contents():
-    app.log("part -1")
+def stop(context):
     try:
-        def DetectEncode():
-         configPath = os.path.join(os.environ['USERPROFILE'], '.wakatime.cfg')
-         with open(configPath, "rb") as file:
-                data = file.read()
-                encoded = chardet.detect(data)
-                encoding = encoded["encoding"]
-                if encoding is None:
-                    return "UTF-8"
-                else:
-                    return encoding
-        DetectEncode()
-
-        app.log(DetectEncode())
-        app.log("part 1")
-        parse=configparser.ConfigParser()
-        parsePath = os.path.join(os.environ['USERPROFILE'], '.wakatime.cfg')
-        parse.read(parsePath, encoding=DetectEncode())
-
-        if os.path.exists(parsePath):
-            APIKEY = parse.get('settings','api_key')
-            APIURL = parse.get('settings','api_url')
-            print("Key: "+APIKEY + " Url: "+ APIURL)
-        else:
-            ErrorMessage = ctypes.windll.user32.MessageBoxW(0, u"Please use the script to download the hackatime files! https://hackatime.hackclub.com/", u"Invalid File", 0)
-
-        arch = platform.machine()
-        app.log(platform.machine())
-
-        app.log("part 2")
-        if arch == "AMD64":
-            WakaTimePath = os.path.join(os.path.dirname(__file__), "WakaTimeCli.exe")
-        elif arch in ("ARM64", "aarch64"):
-            WakaTimePath = os.path.join(os.path.dirname(__file__), "WakaTimeCliARM64.exe")
-        elif arch in ("i386", "x86"):
-            WakaTimePath = os.path.join(os.path.dirname(__file__), "WakaTimeCli386.exe")
-        else:
-            app.log("Unsupported CPU platform ")
-
-
-        timeout = 30
-        start_time = time.time()
-        design = None
-
-
-        data = getActiveDocument()
-
-        app.log("FusionDocument type: " + str(design))
-
-        url = "https://hackatime.hackclub.com/api/v1/my/heartbeats"
-
-        app.log(url)
-
-        
-        lastKnownProjectName = "Untitled"
-        lastKnownDesignName = "Untitled"
-
-        def sendHeartBeat():
-            getActiveDocument()
-            global lastKnownProjectName
-            global lastKnownDesignName
-            folder, design = getActiveDocument()
-            if folder:
-                lastKnownProjectName = folder.name
-            folderName = lastKnownProjectName
-            
-            if design:
-                lastKnownDesignName = design.name
-            designName = lastKnownDesignName
-
-            
-            if design and design.dataFile:
-                versionNumber = f" v{design.dataFile.versionNumber}"
-                designName = design.name.replace(versionNumber, '')
-                
-
-
-            timestamp = int(time.time())
-            if time.time() - lastActive < inactive_threshold: 
-                    CliCommand = [
-                    WakaTimePath,
-                    '--key', APIKEY,
-                    '--entity', folderName,
-                    '--time', str(timestamp),
-                    '--write',
-                    '--plugin', 'fusion360-wakatime/0.0.1',
-                    '--alternate-project', designName,
-                    '--category', "designing",
-                    '--language', 'Fusion360',
-                    '--is-unsaved-entity',
-                    ]
-                    try:
-                        app.log("Running CLI: " + ' '.join(CliCommand))
-                        result = subprocess.run(CliCommand, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
-                        app.log(f"Heartbeat Sent under project: {folderName}")
-                    except Exception as e:
-                        app.log("error!!")
-                        app.log("Error sending heartbeat: " + str(e))
-
-            else:
-                app.log("User Inactive")
-
-
-        def handleUserInteractions(args):
-            update_activity()
-
-
-        def onCommandUse(args: adsk.core.ApplicationCommandEventArgs):
-            update_activity()
-            cmdID = args.commandId
-            app.log(f'Command starting: {cmdID}')
-        futil.add_handler(ui.commandStarting, onCommandUse)
-
-        def looping():
-            while not stopEvent.is_set():
-                sendHeartBeat()
-                time.sleep(heartbeat_interval)
-        threading.Thread(target=looping,daemon=True).start()
-    except Exception as e:
-        app.log("Error when running!!!")
-        app.log(e)
-        
-
-def stop():
-    app.log("Shutting Fusion WakaTime down")
-    futil.clear_handlers()
-    stopEvent.set()
-
+        for event, handler in handlers:
+            event.remove(handler)
+        stop_event.set()
+        app.log(f'{ADDIN_NAME} stopped.')
+    except:
+        app.log(traceback.format_exc())
