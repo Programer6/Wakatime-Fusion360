@@ -2,7 +2,7 @@
 	"autodeskProduct":	"fusion360",
 	"type":	"addin",
 	"main": "FusionWakaTime.py",
-	"author":	"Andy (Some help from its_kronos + Programer6)",
+	"author":	"Andy (Some help from its_kronos)",
 	"description":	"",
 	"version":	"2.0.0",
 	"runOnStartup":	true,
