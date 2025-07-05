@@ -6,11 +6,8 @@ import sys
 import time
 import subprocess
 import platform
-import urllib.request
-import zipfile
-import stat
-import threading
-import json
+import shlex
+import configparser
 from pathlib import Path
 
 # --- Globals and Setup ---
@@ -19,174 +16,153 @@ ui = app.userInterface
 
 # Configuration
 ADDIN_NAME = 'FusionWakaTime'
-ADDIN_VERSION = '2.0.0' 
-HEARTBEAT_INTERVAL = 120  
+ADDIN_VERSION = '2.6.0'
+HEARTBEAT_INTERVAL = 120
 
+# Global state
 stop_event = threading.Event()
 last_heartbeat_time = 0
+CLI_PATH = None # Path to the wakatime-cli executable
 
+# --- Helper Functions ---
 
-RESOURCES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'wakatime-cli-data')
-CLI_PATH = None
-
-def get_os_and_arch():
-    """Determines the OS and architecture for the WakaTime CLI."""
-    os_name = 'unknown'
-    arch_name = 'unknown'
-
+def find_cli_path():
+    """Finds the path to the wakatime-cli executable."""
+    global CLI_PATH
+    # NOTE: This function assumes the user has placed the wakatime-cli
+    # executable inside the add-in's root folder.
+    
+    # Determine the correct filename based on OS and architecture
+    os_name, arch_name = 'unknown', 'unknown'
     if sys.platform == 'win32':
         os_name = 'windows'
-    elif sys.platform == 'darwin': 
+    elif sys.platform == 'darwin':
         os_name = 'darwin'
-    else: 
-        return None, None
+    else:
+        app.log(f"{ADDIN_NAME}: Unsupported OS: {sys.platform}")
+        return None
 
     machine = platform.machine().lower()
-    if 'amd64' in machine or 'x86_64' in machine:
-        arch_name = 'amd64'
-    elif 'arm64' in machine or 'aarch64' in machine:
-        arch_name = 'arm64'
-    elif 'i386' in machine or 'x86' in machine:
-        arch_name = '386'
+    if 'amd64' in machine or 'x86_64' in machine: arch_name = 'amd64'
+    elif 'arm64' in machine or 'aarch64' in machine: arch_name = 'arm64'
     else:
-        return None, None
-        
-    return os_name, arch_name
-
-def get_cli_path():
-    """Gets the path to the wakatime-cli executable, downloading it if necessary."""
-    global CLI_PATH
-    if CLI_PATH and os.path.exists(CLI_PATH):
-        return CLI_PATH
-
-    os_name, arch_name = get_os_and_arch()
-    if not os_name or not arch_name:
-        app.log(f'{ADDIN_NAME}: Unsupported OS or architecture.')
+        app.log(f"{ADDIN_NAME}: Unsupported Architecture: {machine}")
         return None
-    
+
     cli_filename = f'wakatime-cli-{os_name}-{arch_name}'
     if os_name == 'windows':
         cli_filename += '.exe'
-
-    final_cli_path = os.path.join(RESOURCES_DIR, cli_filename)
-
-    if os.path.exists(final_cli_path):
-        CLI_PATH = final_cli_path
+    
+    # Check for the CLI in the add-in's directory
+    potential_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), cli_filename)
+    if os.path.exists(potential_path):
+        CLI_PATH = potential_path
         return CLI_PATH
-
-    app.log(f'{ADDIN_NAME}: wakatime-cli not found. Downloading...')
-    if not os.path.exists(RESOURCES_DIR):
-        os.makedirs(RESOURCES_DIR)
-
-    try:
-        latest_release_url = "https://api.github.com/repos/wakatime/wakatime-cli/releases/latest"
-        with urllib.request.urlopen(latest_release_url) as response:
-            data = json.loads(response.read().decode())
-            latest_version = data['tag_name']
-            app.log(f'{ADDIN_NAME}: Latest CLI version is {latest_version}.')
-    except Exception as e:
-        app.log(f"{ADDIN_NAME}: Could not fetch latest version tag, using fallback. Error: {e}")
-        latest_version = "v1.89.1" 
-
-    download_url = f'https://github.com/wakatime/wakatime-cli/releases/download/{latest_version}/wakatime-cli-{os_name}-{arch_name}.zip'
-    zip_path = os.path.join(RESOURCES_DIR, 'wakatime-cli.zip')
-
-    try:
-        app.log(f'{ADDIN_NAME}: Downloading from {download_url}')
-        urllib.request.urlretrieve(download_url, zip_path)
-        
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(RESOURCES_DIR)
-        
-        os.remove(zip_path)
-
-        if os_name != 'windows' and os.path.exists(final_cli_path):
-            os.chmod(final_cli_path, os.stat(final_cli_path).st_mode | stat.S_IEXEC)
-
-        app.log(f'{ADDIN_NAME}: CLI downloaded and unpacked successfully.')
-        CLI_PATH = final_cli_path
-        return CLI_PATH
-
-    except Exception as e:
-        ui.messageBox(f'Error downloading WakaTime CLI: {e}')
-        app.log(f'{ADDIN_NAME}: Error downloading or extracting wakatime-cli: {e}')
+    else:
+        app.log(f"--- {ADDIN_NAME} ERROR ---")
+        app.log(f"WakaTime CLI not found at: {potential_path}")
+        app.log("Please download the correct wakatime-cli for your system and place it in the add-in folder.")
+        app.log("--------------------------")
         return None
 
-def get_wakatime_config_path():
-    """Returns the cross-platform path to the .wakatime.cfg file."""
-    return os.path.join(str(Path.home()), '.wakatime.cfg')
+def get_wakatime_config_path(): return os.path.join(str(Path.home()), '.wakatime.cfg')
+
+def log_current_config():
+    """Reads the config file and logs the current settings securely."""
+    config_file = get_wakatime_config_path()
+    app.log("--- WakaTime Configuration ---")
+    try:
+        parser = configparser.ConfigParser()
+        parser.read(config_file)
+        api_key = parser.get('settings', 'api_key', fallback="Not found")
+        masked_key = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "Set, but too short."
+        app.log(f"API Key: {masked_key}")
+        api_url = parser.get('settings', 'api_url', fallback="Default (WakaTime.com)")
+        app.log(f"API URL: {api_url}")
+    except Exception as e: app.log(f"Could not read config file: {e}")
+    app.log("----------------------------")
+
+# --- Heartbeat Sending (THE FIX IS HERE) ---
 
 def send_heartbeat(is_write=False):
-    """Constructs the command and sends a heartbeat to the WakaTime API."""
-    cli = get_cli_path()
-    if not cli:
-        app.log(f'{ADDIN_NAME}: Cannot send heartbeat, wakatime-cli path is not configured.')
-        return
-
+    """Identifies the active file/project and sends a heartbeat via the CLI."""
+    global last_heartbeat_time
+    if not is_write and (time.time() - last_heartbeat_time < HEARTBEAT_INTERVAL): return
+    
+    # We check for the CLI path here. If it's not found, we do nothing.
+    cli = CLI_PATH
     doc = app.activeDocument
-    if not doc: return
+    if not cli or not doc: return
 
-    entity = doc.name
-    project = "Unsaved Project"
-    if doc.dataFile:
+    entity = doc.name; project = "Fusion 360"
+    if doc.dataFile and doc.dataFile.parentFolder:
+        project = doc.dataFile.parentFolder.name
         entity = doc.dataFile.name
-        if doc.dataFile.parentFolder:
-            project = doc.dataFile.parentFolder.name
-    
-    command = [ cli, '--entity', entity, '--plugin', f'fusion-360-wakatime/{ADDIN_VERSION}', '--project', project ]
-    if is_write:
-        command.append('--write')
-    
-    creationflags = 0
-    if sys.platform == 'win32':
-        creationflags = subprocess.CREATE_NO_WINDOW
-
-    app.log(f'{ADDIN_NAME}: Sending heartbeat: {" ".join(command)}')
-    try:
-        subprocess.Popen(command, creationflags=creationflags)
-        global last_heartbeat_time
-        last_heartbeat_time = time.time()
-    except Exception as e:
-        app.log(f'{ADDIN_NAME}: Error sending heartbeat: {e}')
-
-
-class ActivityHandler(adsk.core.DocumentEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args: adsk.core.DocumentEventArgs):
+    else:
         try:
-            # Any tracked event means the user is active. Send a heartbeat if enough time has passed.
-            if time.time() - last_heartbeat_time > HEARTBEAT_INTERVAL:
-                is_write = isinstance(args, adsk.core.DocumentSavingEventArgs)
-                send_heartbeat(is_write=is_write)
-        except:
-            app.log(traceback.format_exc())
+            if app.data.activeProject: project = app.data.activeProject.name
+        except: pass
+    
+    # --- THE FIX ---
+    # Use --alternate-project because it is more robust for names with spaces.
+    command_list = [cli, '--entity', entity, '--plugin', f'fusion-360-wakatime/{ADDIN_VERSION}', '--alternate-project', project]
+    if is_write: command_list.append('--write')
+    
+    try:
+        command_string = shlex.join(command_list)
+        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+        subprocess.Popen(command_string, shell=True, creationflags=creationflags)
+        last_heartbeat_time = time.time()
+        app.log(f"Heartbeat sent for project: '{project}' (Write: {is_write})")
+    except Exception as e:
+        app.log(f'{ADDIN_NAME}: Error sending heartbeat with shlex: {e}')
+
+# --- Event Handlers ---
+
+class CommandStartingHandler(adsk.core.ApplicationCommandEventHandler):
+    def __init__(self): super().__init__()
+    def notify(self, args: adsk.core.ApplicationCommandEventArgs):
+        try: send_heartbeat(is_write=False)
+        except: app.log(traceback.format_exc())
+
+class SaveHandler(adsk.core.DocumentEventHandler):
+    def __init__(self): super().__init__()
+    def notify(self, args: adsk.core.DocumentEventArgs):
+        try: send_heartbeat(is_write=True)
+        except: app.log(traceback.format_exc())
 
 handlers = []
 
+# --- Main Add-in Functions: run() and stop() ---
+
 def run(context):
     try:
+        # Check if the user has a config file.
         if not os.path.exists(get_wakatime_config_path()):
-            ui.messageBox(f"WakaTime API Key not found.\nPlease create the file:\n{get_wakatime_config_path()}\n\nand add your API key before restarting Fusion 360.", f"{ADDIN_NAME} Setup")
+            ui.messageBox("WakaTime config file not found. Please create ~/.wakatime.cfg with your API key.", f"{ADDIN_NAME} Error")
             return
         
-        get_cli_path() 
+        # Find the wakatime-cli path at startup.
+        if not find_cli_path():
+            # An error message is already logged by the function.
+            return
 
-        on_activity = ActivityHandler()
-        doc_events = [app.documentActivated, app.documentSaved]
+        on_command_starting = CommandStartingHandler()
+        ui.commandStarting.add(on_command_starting)
+        handlers.append((ui.commandStarting, on_command_starting))
+
+        on_save = SaveHandler()
+        app.documentSaved.add(on_save)
+        handlers.append((app.documentSaved, on_save))
         
-        for event in doc_events:
-            event.add(on_activity)
-            handlers.append((event, on_activity))
-
         app.log(f'{ADDIN_NAME} v{ADDIN_VERSION} started successfully.')
+        log_current_config()
     except:
         app.log(traceback.format_exc())
 
 def stop(context):
     try:
-        for event, handler in handlers:
-            event.remove(handler)
+        for event, handler in handlers: event.remove(handler)
         stop_event.set()
         app.log(f'{ADDIN_NAME} stopped.')
     except:
