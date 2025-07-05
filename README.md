@@ -65,18 +65,21 @@ The first time you run it, the add-in will automatically download the necessary 
 
 For the add-in to log your time, you need to tell it your secret WakaTime API key.
 
-1.  Find your **Secret API Key** on your [WakaTime Settings page](https://wakatime.com/settings/api-key).
+1.  Find your **Secret API Key** on your [WakaTime Settings page](https://wakatime.com/settings/api-key) or  or if you're a [Hackclubber](https://hackclub.com) with [Hakatime Setting Page](https://hackatime.hackclub.com/my/settings).
 
 2.  Create a configuration file in your user home directory. The file must be named `.wakatime.cfg`.
     -   **Windows:** `C:\Users\YOUR_USERNAME\.wakatime.cfg`
     -   **macOS:** `/Users/YOUR_USERNAME/.wakatime.cfg`
+  
 
 3.  Open the file in a text editor and add the following lines, pasting your key where indicated:
 
-    ```ini
-    [settings]
-    api_key = YOUR_SECRET_API_KEY_HERE
-    ```
+[settings]
+api_url = https://hackatime.hackclub.com/api/hackatime/v1 or 
+api_key = YOUR_API_Key
+heartbeat_rate_limit_seconds = 30
++ any other wakatime configs you want to add: https://github.com/wakatime/wakatime-cli/blob/develop/USAGE.md#ini-config-file
+
 
 4.  Save the file. Restart Fusion 360, and your time will start logging automatically!
 
