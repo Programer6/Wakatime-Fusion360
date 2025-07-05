@@ -39,6 +39,7 @@ Follow these steps to install the add-in. This process works for both Windows an
 -   Rename the unzipped folder from `Hackatime-Fusion360-main` to exactly:
     **`FusionWakaTime`**
     *(This step is very important!)*
+<img width="173" alt="Screenshot 2025-07-05 at 11 40 42 AM" src="https://github.com/user-attachments/assets/7b1a4d75-fba6-454a-aa7c-1781b04aea50" />
 
 #### 3. Add to Fusion 360
 -   Open Fusion 360.
