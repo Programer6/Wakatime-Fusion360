@@ -1,36 +1,73 @@
-# Installation Guide
-### Credits
-credits to @its-kronos for hotfixing while i was asleep 
+# Hackatime-Fusion360
+Log the time you spend designing in Autodesk Fusion 360 automatically with [WakaTime](https://wakatime.com) or if you're a [Hackclubber](https://hackclub.com) with [Hakatime](https://hackatime.hackclub.com).
+
+This add-in works seamlessly in the background on both **Windows** and **macOS**.
+
+## Features:
+**Automatic Time Tracking:** The add-in detects your activity automatically every 2 Minutes.
+-   **Cross-Platform:** Works identically on Windows and macOS.
+-   **Intelligent CLI Handling:** Automatically downloads and manages the correct WakaTime command-line tool for your system.
+-   **Project Detection:** Automatically detects the active file and uses its **parent folder** as the project name in WakaTime.
+-   **Startup-Ready:** Set it to run on startup and never think about it again.
 
 
 ## Prerequisites
 
-- Fusion 360
-- Python
-- Windows 10/11
-
-## Download
-Option 1
-1. Use the install script
-
-2. Open it in CMD 
-
-3. Run ``` python install.py```
+-   Autodesk Fusion 360
+-   A free [WakaTime Account](https://wakatime.com/signup)
 
 
-Option 2
+## Installation Guide
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/LiveWaffle/Hackatime-Fusion360.git
+Follow these steps to install the add-in. This process works for both Windows and macOS.
 
-2. Rename the cloned folder to "FusionWakaTime"
+#### 1. Download the Add-in
+-   Go to the [main page of this repository](https://github.com/LiveWaffle/Hackatime-Fusion360).
+-   Click the green `<> Code` button, then click **Download ZIP**.
+-   Unzip the downloaded file. You will get a folder named something like `Hackatime-Fusion360-main`.
 
-3. Open Fusion 360 > Utilities > Addins > Create New
+#### 2. Rename the Folder
+-   Rename the unzipped folder from `Hackatime-Fusion360-main` to exactly:
+    **`FusionWakaTime`**
+    *(This step is very important!)*
 
-4. *Optional* Check Run on startup
+#### 3. Add to Fusion 360
+-   Open Fusion 360.
+-   Go to the **UTILITIES** tab and click the **Scripts and Add-Ins** icon.
+-   In the new window, select the **Add-Ins** tab.
+-   Click the green **+** icon next to "My Add-Ins".
+-   ![guideimage2](https://github.com/LiveWaffle/Hackatime-Fusion360/assets/175021115/285c57b7-5a04-4054-9549-14a01c40f283)
 
+-   In the file dialog, navigate to and select the `FusionWakaTime` folder you renamed in Step 2.
 
-   ![Guide Part 1](./guidepart1.png)
-   ![Guide Image 2](./guideimage2.png)
+#### 4. Run the Add-in
+-   The `FusionWakaTime` add-in will now appear in your list.
+-   Select it and click **Run**.
+-   **IMPORTANT:** Check the **Run on startup** box so it runs automatically every time you open Fusion 360.
 
+The first time you run it, the add-in will automatically download the necessary command-line tool in the background.
+
+---
+
+## First-Time Configuration (API Key)
+
+For the add-in to log your time, you need to tell it your secret WakaTime API key.
+
+1.  Find your **Secret API Key** on your [WakaTime Settings page](https://wakatime.com/settings/api-key).
+
+2.  Create a configuration file in your user home directory. The file must be named `.wakatime.cfg`.
+    -   **Windows:** `C:\Users\YOUR_USERNAME\.wakatime.cfg`
+    -   **macOS:** `/Users/YOUR_USERNAME/.wakatime.cfg`
+
+3.  Open the file in a text editor and add the following lines, pasting your key where indicated:
+
+    ```ini
+    [settings]
+    api_key = YOUR_SECRET_API_KEY_HERE
+    ```
+
+4.  Save the file. Restart Fusion 360, and your time will start logging automatically!
+
+## Credits
+
+-   Credits to **@its-kronos** for hotfixing and contributions.
