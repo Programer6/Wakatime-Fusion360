@@ -1,4 +1,5 @@
 
+
 import adsk.core
 import adsk.fusion
 import traceback
@@ -11,244 +12,172 @@ import configparser
 import threading
 from pathlib import Path
 
+# --- Add the bundled 'lib' folder to Python's path ---
+lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lib')
+if lib_path not in sys.path:
+    sys.path.insert(0, lib_path)
+
+import chardet
+
 # --- Globals and Setup ---
 app = adsk.core.Application.get()
 ui = app.userInterface
-
-# Configuration
 ADDIN_NAME = 'FusionWakaTime'
-ADDIN_VERSION = '6.0.1'
+ADDIN_VERSION = '6.0.7'
 HEARTBEAT_INTERVAL = 120
-
-# Global state
 stop_event = threading.Event()
 last_heartbeat_time = 0
 CLI_PATH = None
 
 # --- Helper Functions ---
-
 def find_cli_path():
-    """Looks for the wakatime-cli executable in standard user locations."""
     global CLI_PATH
-    
-    # Determine OS and Architecture
-    os_name = 'unknown'
-    if sys.platform.startswith('linux'): os_name = 'linux'
-    elif sys.platform == 'darwin': os_name = 'darwin'
-    elif sys.platform == 'win32': os_name = 'windows'
-    else: return None
-
+    os_name = 'windows' if sys.platform == 'win32' else ('darwin' if sys.platform == 'darwin' else 'linux')
     machine = platform.machine().lower()
-    if 'arm64' in machine or 'aarch64' in machine: arch_name = 'arm64'
-    elif 'amd64' in machine or 'x86_64' in machine: arch_name = 'amd64'
-    else: return None
-
+    arch_name = 'arm64' if 'arm64' in machine or 'aarch64' in machine else 'amd64'
     cli_filename = f'wakatime-cli-{os_name}-{arch_name}'
     if os_name == 'windows': cli_filename += '.exe'
-
-    # Check in two standard locations: ~/.wakatime/ and ~/
     home_dir = str(Path.home())
-    locations_to_check = [
-        os.path.join(home_dir, '.wakatime', cli_filename),
-        os.path.join(home_dir, cli_filename)
-    ]
-
+    locations_to_check = [os.path.join(home_dir, '.wakatime', cli_filename), os.path.join(home_dir, cli_filename)]
     for path in locations_to_check:
         if os.path.exists(path):
-            if os_name in ('linux', 'darwin') and not os.access(path, os.X_OK):
-                app.log(f"--- {ADDIN_NAME} PERMISSION ERROR ---")
-                app.log(f"CLI found at {path}, but it is not executable. Please run 'chmod +x \"{path}\"'")
-                continue
             CLI_PATH = path
             return CLI_PATH
-
-    app.log(f"--- {ADDIN_NAME} ERROR: WakaTime CLI not found in standard locations. ---")
-    app.log("Please download the CLI and place it in your home directory (~) or in ~/.wakatime/")
     return None
 
 def get_wakatime_config_path(): 
     return os.path.join(str(Path.home()), '.wakatime.cfg')
+
+def get_config_encoding(config_path):
+    try:
+        with open(config_path, 'rb') as f: raw_data = f.read()
+        result = chardet.detect(raw_data)
+        return result['encoding'] if result['encoding'] else 'utf-8'
+    except Exception as e:
+        app.log(f"Config encoding detection failed: {e}")
+        return 'utf-8'
 
 def log_current_config():
     config_file = get_wakatime_config_path()
     app.log("--- WakaTime Configuration ---")
     try:
         parser = configparser.ConfigParser()
-        parser.read(config_file)
+        parser.read(config_file, encoding=get_config_encoding(config_file))
         api_key = parser.get('settings', 'api_key', fallback="Not found")
-        masked_key = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "Set, but too short."
-        app.log(f"API Key: {masked_key}")
-        api_url = parser.get('settings', 'api_url', fallback="Default (WakaTime.com)")
-        app.log(f"API URL: {api_url}")
-    except Exception as e: 
-        app.log(f"Could not read config file: {e}")
+        app.log(f"API Key: {f'{api_key[:4]}...{api_key[-4:]}' if len(api_key) > 8 else 'Set, but too short.'}")
+        app.log(f"API URL: {parser.get('settings', 'api_url', fallback='Default (WakaTime.com)')}")
+    except Exception as e: app.log(f"Could not read config file: {e}")
     app.log("----------------------------")
 
 # --- Heartbeat Sending ---
-
 def send_heartbeat(is_write=False):
     global last_heartbeat_time
-    if not is_write and (time.time() - last_heartbeat_time < HEARTBEAT_INTERVAL): 
-        return
-    
+    if not is_write and (time.time() - last_heartbeat_time < HEARTBEAT_INTERVAL): return
     cli = CLI_PATH
     try:
         doc = app.activeDocument
-        if not doc or not doc.isValid:
-            app.log(f"{ADDIN_NAME}: No valid active document found.")
-            return
-    except RuntimeError as e:
-        app.log(f"{ADDIN_NAME}: Error accessing active document: {str(e)}")
-        return
-    if not cli: 
-        return
+        if not doc or not doc.isValid: return
+    except RuntimeError: return
+    if not cli: return
 
-    project = "Fusion 360"  # Default project name
+    app.log("--- Heartbeat Resolution Start ---")
+    project = "Fusion 360"
     entity = doc.name if doc else "Untitled"
-    
-    # Debug logging for project name resolution
-    app.log("--- Debug: Project Name Resolution ---")
-    app.log(f"Initial doc name: {entity}")
-    
     try:
         if doc and doc.dataFile:
-            app.log("Document has dataFile")
+            app.log("Document has a dataFile. Entity set to dataFile.name.")
             entity = doc.dataFile.name
-            app.log(f"Entity name set to: {entity}")
-            
+            app.log("Checking for parentFolder...")
             if doc.dataFile.parentFolder:
-                app.log("Document has parent folder")
                 project = doc.dataFile.parentFolder.name
-                app.log(f"Project name set to: {project}")
+                app.log(f"SUCCESS: Project set from parentFolder: {project}")
             else:
-                app.log("No parent folder found")
-                
-            # Fallback to parent project
-            if not project or project == "Fusion 360":
-                if doc.dataFile.parentProject:
-                    project = doc.dataFile.parentProject.name
-                    app.log(f"Using parent project name: {project}")
+                app.log("parentFolder is None. Checking for activeProject.")
+                active_proj = app.data.activeProject
+                if active_proj:
+                    project = active_proj.name
+                    app.log(f"SUCCESS: Project set from activeProject: {project}")
+                else:
+                    app.log("WARNING: activeProject is also None. Using default project name.")
         elif app.data.activeProject:
-            project = app.data.activeProject.name
-            app.log(f"Using active project name: {project}")
-            
+            app.log("Document is unsaved. Checking for activeProject.")
+            active_proj = app.data.activeProject
+            if active_proj:
+                project = active_proj.name
+                app.log(f"SUCCESS: Project for unsaved file set from activeProject: {project}")
+            else:
+                app.log("WARNING: activeProject is None for unsaved file.")
+        else:
+            app.log("No dataFile and no activeProject. Using default names.")
     except Exception as e:
-        app.log(f"{ADDIN_NAME}: Project name resolution error: {str(e)}")
+        app.log(f"CRITICAL ERROR during project/entity resolution: {e}")
         app.log(traceback.format_exc())
 
-    # Construct command with proper quoting for spaces
+    app.log(f"--- Final Values: Project='{project}', Entity='{entity}' ---")
+    
     command_list = [
-        cli,
-        '--entity', f'"{entity}"',  # Quote the entity name
-        '--plugin', f'fusion-360-wakatime/{ADDIN_VERSION}',
-        '--project', f'"{project}"',  # Quote the project name
-        '--language', 'Fusion360',
-        '--category', 'designing'
+        cli, '--entity', entity, '--plugin', f'fusion-360-wakatime/{ADDIN_VERSION}',
+        '--project', project, '--language', 'Fusion360', '--category', 'designing'
     ]
-    
-    if is_write:
-        command_list.append('--write')
-    elif not doc or not doc.dataFile:
-        command_list.append('--is-unsaved-entity')
-
-    app.log("--- Heartbeat Details ---")
-    app.log(f"CLI Path: {cli}")
-    app.log(f"Project: {project}")
-    app.log(f"Entity: {entity}")
-    app.log(f"Command: {' '.join(command_list)}")
-    
+    if is_write: command_list.append('--write')
+    elif not doc or not doc.dataFile: command_list.append('--is-unsaved-entity')
     try:
-        # Use shell=True to handle quoted arguments properly
-        command_string = ' '.join(command_list)
         creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-        
         process = subprocess.Popen(
-            command_string,
-            shell=True,
-            creationflags=creationflags,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True  # Return strings instead of bytes
+            command_list, creationflags=creationflags,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
-        
-        stdout, stderr = process.communicate()
-        if stdout:
-            app.log(f"Heartbeat stdout: {stdout}")
-        if stderr:
-            app.log(f"Heartbeat stderr: {stderr}")
-            
+        stdout, stderr = process.communicate(timeout=15)
+        if stderr: app.log(f"Heartbeat CLI stderr: {stderr.strip()}")
         last_heartbeat_time = time.time()
-        app.log("--> Heartbeat sent successfully.")
+        app.log("--> Heartbeat command executed.")
     except Exception as e:
-        app.log(f'{ADDIN_NAME}: Error sending heartbeat: {str(e)}')
-        app.log(traceback.format_exc())
+        app.log(f'Error executing heartbeat command: {e}')
 
 # --- Event Handlers ---
-
 class CommandStartingHandler(adsk.core.ApplicationCommandEventHandler):
-    def __init__(self): 
-        super().__init__()
-    
+    def __init__(self): super().__init__()
     def notify(self, args: adsk.core.ApplicationCommandEventArgs):
-        try: 
-            send_heartbeat(is_write=False)
-        except: 
-            app.log(traceback.format_exc())
-
+        try: send_heartbeat(is_write=False)
+        except: app.log(traceback.format_exc())
 class SaveHandler(adsk.core.DocumentEventHandler):
-    def __init__(self): 
-        super().__init__()
-    
+    def __init__(self): super().__init__()
     def notify(self, args: adsk.core.DocumentEventArgs):
-        try: 
-            send_heartbeat(is_write=True)
-        except: 
-            app.log(traceback.format_exc())
-
+        try: send_heartbeat(is_write=True)
+        except: app.log(traceback.format_exc())
 class DocumentOpenedHandler(adsk.core.DocumentEventHandler):
-    def __init__(self): 
-        super().__init__()
-    
+    def __init__(self): super().__init__()
     def notify(self, args: adsk.core.DocumentEventArgs):
-        try: 
-            send_heartbeat(is_write=False)
-        except: 
-            app.log(traceback.format_exc())
-
+        try: send_heartbeat(is_write=False)
+        except: app.log(traceback.format_exc())
 handlers = []
 
+# --- Add-in Main Functions ---
 def run(context):
     try:
         if not os.path.exists(get_wakatime_config_path()):
-            ui.messageBox("WakaTime config file (~/.wakatime.cfg) not found.", f"{ADDIN_NAME} Error")
+            ui.messageBox(f"{ADDIN_NAME} Error: WakaTime config file (~/.wakatime.cfg) not found.")
             return
-        
         if not find_cli_path():
+            ui.messageBox(f"{ADDIN_NAME} Error: WakaTime command-line tool not found.")
             return
-
-        # Add event handlers
         on_command_starting = CommandStartingHandler()
         ui.commandStarting.add(on_command_starting)
         handlers.append((ui.commandStarting, on_command_starting))
-
         on_save = SaveHandler()
         app.documentSaved.add(on_save)
         handlers.append((app.documentSaved, on_save))
-
         on_document_opened = DocumentOpenedHandler()
         app.documentOpened.add(on_document_opened)
         handlers.append((app.documentOpened, on_document_opened))
-        
         app.log(f'{ADDIN_NAME} v{ADDIN_VERSION} started successfully.')
         app.log(f"Using CLI from: {CLI_PATH}")
         log_current_config()
     except:
         app.log(traceback.format_exc())
-
 def stop(context):
     try:
-        for event, handler in handlers: 
-            event.remove(handler)
+        for event, handler in handlers: event.remove(handler)
         stop_event.set()
         app.log(f'{ADDIN_NAME} stopped.')
     except:
