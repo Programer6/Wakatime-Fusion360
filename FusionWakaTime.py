@@ -1,4 +1,3 @@
-# FusionWakaTime.py - v6.0.0 - Definitive User-Managed Version
 
 import adsk.core
 import adsk.fusion
@@ -18,7 +17,7 @@ ui = app.userInterface
 
 # Configuration
 ADDIN_NAME = 'FusionWakaTime'
-ADDIN_VERSION = '6.0.0'
+ADDIN_VERSION = '6.0.1'
 HEARTBEAT_INTERVAL = 120
 
 # Global state
@@ -67,7 +66,8 @@ def find_cli_path():
     app.log("Please download the CLI and place it in your home directory (~) or in ~/.wakatime/")
     return None
 
-def get_wakatime_config_path(): return os.path.join(str(Path.home()), '.wakatime.cfg')
+def get_wakatime_config_path(): 
+    return os.path.join(str(Path.home()), '.wakatime.cfg')
 
 def log_current_config():
     config_file = get_wakatime_config_path()
@@ -80,74 +80,140 @@ def log_current_config():
         app.log(f"API Key: {masked_key}")
         api_url = parser.get('settings', 'api_url', fallback="Default (WakaTime.com)")
         app.log(f"API URL: {api_url}")
-    except Exception as e: app.log(f"Could not read config file: {e}")
+    except Exception as e: 
+        app.log(f"Could not read config file: {e}")
     app.log("----------------------------")
 
-# --- Heartbeat Sending (Using the Direct, Reliable Method) ---
+# --- Heartbeat Sending ---
 
 def send_heartbeat(is_write=False):
     global last_heartbeat_time
-    if not is_write and (time.time() - last_heartbeat_time < HEARTBEAT_INTERVAL): return
+    if not is_write and (time.time() - last_heartbeat_time < HEARTBEAT_INTERVAL): 
+        return
     
     cli = CLI_PATH
-    doc = app.activeDocument
-    if not cli or not doc: return
-
-    project = "Fusion 360"
-    entity = doc.name
     try:
-        if doc.dataFile:
+        doc = app.activeDocument
+        if not doc or not doc.isValid:
+            app.log(f"{ADDIN_NAME}: No valid active document found.")
+            return
+    except RuntimeError as e:
+        app.log(f"{ADDIN_NAME}: Error accessing active document: {str(e)}")
+        return
+    if not cli: 
+        return
+
+    project = "Fusion 360"  # Default project name
+    entity = doc.name if doc else "Untitled"
+    
+    # Debug logging for project name resolution
+    app.log("--- Debug: Project Name Resolution ---")
+    app.log(f"Initial doc name: {entity}")
+    
+    try:
+        if doc and doc.dataFile:
+            app.log("Document has dataFile")
             entity = doc.dataFile.name
+            app.log(f"Entity name set to: {entity}")
+            
             if doc.dataFile.parentFolder:
+                app.log("Document has parent folder")
                 project = doc.dataFile.parentFolder.name
+                app.log(f"Project name set to: {project}")
+            else:
+                app.log("No parent folder found")
+                
+            # Fallback to parent project
+            if not project or project == "Fusion 360":
+                if doc.dataFile.parentProject:
+                    project = doc.dataFile.parentProject.name
+                    app.log(f"Using parent project name: {project}")
         elif app.data.activeProject:
             project = app.data.activeProject.name
+            app.log(f"Using active project name: {project}")
+            
     except Exception as e:
-        app.log(f"{ADDIN_NAME}: Could not determine project name, using default. Error: {e}")
+        app.log(f"{ADDIN_NAME}: Project name resolution error: {str(e)}")
+        app.log(traceback.format_exc())
 
-    # --- THE DIRECT METHOD ---
+    # Construct command with proper quoting for spaces
     command_list = [
         cli,
-        '--entity', entity,
+        '--entity', f'"{entity}"',  # Quote the entity name
         '--plugin', f'fusion-360-wakatime/{ADDIN_VERSION}',
-        '--alternate-project', project,
+        '--project', f'"{project}"',  # Quote the project name
         '--language', 'Fusion360',
         '--category', 'designing'
     ]
+    
     if is_write:
         command_list.append('--write')
-    elif not doc.dataFile:
+    elif not doc or not doc.dataFile:
         command_list.append('--is-unsaved-entity')
 
-    app.log("--- Preparing Heartbeat ---")
-    app.log(f"  - Project: {project}")
-    app.log(f"  - Entity: {entity}")
-    app.log(f"  - Write: {is_write}")
-    app.log("---------------------------")
+    app.log("--- Heartbeat Details ---")
+    app.log(f"CLI Path: {cli}")
+    app.log(f"Project: {project}")
+    app.log(f"Entity: {entity}")
+    app.log(f"Command: {' '.join(command_list)}")
     
     try:
-        # Pass the list directly. DO NOT use shell=True. This is the most reliable way.
+        # Use shell=True to handle quoted arguments properly
+        command_string = ' '.join(command_list)
         creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-        subprocess.Popen(command_list, creationflags=creationflags)
         
+        process = subprocess.Popen(
+            command_string,
+            shell=True,
+            creationflags=creationflags,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True  # Return strings instead of bytes
+        )
+        
+        stdout, stderr = process.communicate()
+        if stdout:
+            app.log(f"Heartbeat stdout: {stdout}")
+        if stderr:
+            app.log(f"Heartbeat stderr: {stderr}")
+            
         last_heartbeat_time = time.time()
-        app.log("--> Heartbeat command sent successfully.")
+        app.log("--> Heartbeat sent successfully.")
     except Exception as e:
-        app.log(f'{ADDIN_NAME}: Error sending heartbeat: {e}')
+        app.log(f'{ADDIN_NAME}: Error sending heartbeat: {str(e)}')
+        app.log(traceback.format_exc())
 
-# --- Event Handlers and Main Functions ---
+# --- Event Handlers ---
 
 class CommandStartingHandler(adsk.core.ApplicationCommandEventHandler):
-    def __init__(self): super().__init__()
+    def __init__(self): 
+        super().__init__()
+    
     def notify(self, args: adsk.core.ApplicationCommandEventArgs):
-        try: send_heartbeat(is_write=False)
-        except: app.log(traceback.format_exc())
+        try: 
+            send_heartbeat(is_write=False)
+        except: 
+            app.log(traceback.format_exc())
 
 class SaveHandler(adsk.core.DocumentEventHandler):
-    def __init__(self): super().__init__()
+    def __init__(self): 
+        super().__init__()
+    
     def notify(self, args: adsk.core.DocumentEventArgs):
-        try: send_heartbeat(is_write=True)
-        except: app.log(traceback.format_exc())
+        try: 
+            send_heartbeat(is_write=True)
+        except: 
+            app.log(traceback.format_exc())
+
+class DocumentOpenedHandler(adsk.core.DocumentEventHandler):
+    def __init__(self): 
+        super().__init__()
+    
+    def notify(self, args: adsk.core.DocumentEventArgs):
+        try: 
+            send_heartbeat(is_write=False)
+        except: 
+            app.log(traceback.format_exc())
 
 handlers = []
 
@@ -160,6 +226,7 @@ def run(context):
         if not find_cli_path():
             return
 
+        # Add event handlers
         on_command_starting = CommandStartingHandler()
         ui.commandStarting.add(on_command_starting)
         handlers.append((ui.commandStarting, on_command_starting))
@@ -167,6 +234,10 @@ def run(context):
         on_save = SaveHandler()
         app.documentSaved.add(on_save)
         handlers.append((app.documentSaved, on_save))
+
+        on_document_opened = DocumentOpenedHandler()
+        app.documentOpened.add(on_document_opened)
+        handlers.append((app.documentOpened, on_document_opened))
         
         app.log(f'{ADDIN_NAME} v{ADDIN_VERSION} started successfully.')
         app.log(f"Using CLI from: {CLI_PATH}")
@@ -176,7 +247,8 @@ def run(context):
 
 def stop(context):
     try:
-        for event, handler in handlers: event.remove(handler)
+        for event, handler in handlers: 
+            event.remove(handler)
         stop_event.set()
         app.log(f'{ADDIN_NAME} stopped.')
     except:
